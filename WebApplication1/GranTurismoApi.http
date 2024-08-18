@@ -1,0 +1,9 @@
+@GranTurismoApi_HostAddress = http://localhost:5210
+
+GET {{GranTurismoApi_HostAddress}}/cars/
+Accept: application/json
+
+###
+
+GET {{GranTurismoApi_HostAddress}}/circuits/
+Accept: application/json
