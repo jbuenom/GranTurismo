@@ -7,3 +7,7 @@ services:
       - MSSQL_SA_PASSWORD=Password1*
     ports:
       - "1433:1433"
+    volumes:
+      - db-gt:/data/db
+volumes:
+  db-gt:
