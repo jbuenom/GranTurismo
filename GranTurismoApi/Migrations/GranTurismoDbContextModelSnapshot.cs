@@ -46,7 +46,7 @@ namespace GranTurismoApi.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Cars");
+                    b.ToTable("Cars", (string)null);
                 });
 
             modelBuilder.Entity("GranTurismoApi.Circuit", b =>
@@ -71,7 +71,7 @@ namespace GranTurismoApi.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Circuits");
+                    b.ToTable("Circuits", (string)null);
                 });
 #pragma warning restore 612, 618
         }
