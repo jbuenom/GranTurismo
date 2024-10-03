@@ -1,19 +1,14 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using GranTurismoDataConsole;
+using Microsoft.EntityFrameworkCore;
 
-namespace GranTurismoDataConsole.GranTurismoDataDbContext
+public class GTDataDbContext : DbContext
 {
-    public class GTDataDbContext : DbContext
+    public DbSet<Link> Links { get; set; }
+
+    // Este método se utiliza para configurar la base de datos.
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        public GTDataDbContext(DbContextOptions<GTDataDbContext> options) : base(options)
-        {
-
-        }
-
-        public DbSet<Link> Links { get; set; }
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-        {
-            optionsBuilder.UseSqlServer(@"Server=localhost,1433;Database=GranTurismoData;User=sa;Password=Password1*;TrustServerCertificate=True");
-        }
+        // Conexión de ejemplo para SQL Server (reemplázala según sea necesario)
+        optionsBuilder.UseSqlServer(@"Server=localhost,1433;Database=GranTurismoData;User=sa;Password=Password1*;TrustServerCertificate=True");
     }
 }

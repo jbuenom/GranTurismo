@@ -1,4 +1,4 @@
-﻿using GranTurismoDataConsole.GranTurismoDataDbContext;
+﻿using GranTurismoDataConsole;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OpenQA.Selenium;
@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace GranTurismoDataConsole
 {
@@ -18,15 +19,10 @@ namespace GranTurismoDataConsole
         public static ChromeOptions chromeOptions = new ChromeOptions();
         static void Main(string[] args)
         {
-            var configuration = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-                .Build();
-
-            var serviceProvider = new ServiceCollection()
-                .AddDbContext<GTDataDbContext>(options =>
-                    options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")))
-                .BuildServiceProvider();
+            using (var context = new GTDataDbContext())
+            {
+                context.Database.Migrate();
+            }
 
 
             bool exit = false;
@@ -83,7 +79,6 @@ namespace GranTurismoDataConsole
               .Where(href => !string.IsNullOrEmpty(href))
               .Distinct();
 
-            // Save on db all the link with created false
             foreach (var href in hrefs)
             {
                 saveCarLink(href);
@@ -96,44 +91,46 @@ namespace GranTurismoDataConsole
         }
         static void saveCarLink(string carLink)
         {
-            //using (var context = new MyDbContext())
-            //{
-            //    var newCarLink = new Link { Url = carLink };
-            //    context.Links.Add(carLink);
-            //    context.SaveChanges();
-            //}
-
-
+            using (var context = new GTDataDbContext())
+            {
+                var newLink = new Link { Href = carLink, Created = false };
+                context.Links.Add(newLink);
+                context.SaveChanges();
+            }
         }
 
 
         static void processCarsLinks()
         {
-            //using (var context = new MyDbContext())
-            //{
-            //    // Obtener todos los enlaces no procesados
-            //    var enlaces = context.Enlaces.Where(e => e.Procesado == false).ToList();
+            var result = false;
+            using (var context = new GTDataDbContext())
+            {
 
-            //    foreach (var enlace in enlaces)
-            //    {
-            //        // Aquí podrías usar Selenium nuevamente para visitar el enlace
-            var result = processCarLink("https://gran-turismo.fandom.com/wiki/Alfa_Romeo_MiTo_1.4_T_Sport_%2709");
+                var links = context.Links.Where(link => link.Created == false).ToList();
+                
+                foreach (var link in links)
+                {
+                    
+                    result = processCarLink(link.Href!);
 
-            //        // Marcar como procesado en la base de datos
-            //if(result)
-            //{
-            //    enlace.Procesado = true;
-
-            //}
-            //      
-            //        context.SaveChanges();
-            //    }
-            //}
+                    if(result)
+                    {
+                        link.Created = true;
+                        context.SaveChanges();
+                    }
+                    
+                }
+            }
         }
 
         static bool processCarLink(string carLink)
         {
-            var result = true;
+            if (string.IsNullOrEmpty(carLink))
+            {
+                return false;
+            }
+
+            var result = false;
             Driver.Navigate().GoToUrl(carLink);
 
             try
@@ -157,11 +154,18 @@ namespace GranTurismoDataConsole
                 var car = model[0].Text + ' ' + finalBrand + ' ' + power[0].Text.Split(' ')[0] + ' ' + weight[0].Text.Split(' ')[0] + ' ' + finalCategory;
 
                 // Call API to insert car
+                // Llamar a la API y si devuelve bien, lo marcamos como true
 
+                if (true) // Check que todas las propiedades necesarias se estén mandando rellenadas
+                {
+                    
+                }
+
+                result = true;
             }
             catch
             {
-                result = false;
+
             }
 
             return result;
