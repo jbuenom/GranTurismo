@@ -67,7 +67,6 @@ namespace GranTurismoDataConsole
             Console.WriteLine("Let's update cars list...");
             chromeOptions.AddArgument("--disable-search-engine-choice-screen");
             Driver = new ChromeDriver(chromeOptions);
-            // Go to Car List
             Driver.Manage().Window.Maximize();
             Driver.Navigate().GoToUrl("https://gran-turismo.fandom.com/wiki/Gran_Turismo_7/Car_List");
             // Accept cookies
