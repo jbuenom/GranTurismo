@@ -1,15 +1,9 @@
-﻿using GranTurismoDataConsole;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+﻿
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
-using OpenQA.Selenium.Interactions;
-using OpenQA.Selenium.Support.UI;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
+using System.Text;
+using System.Text.Json;
 
 namespace GranTurismoDataConsole
 {
@@ -17,7 +11,8 @@ namespace GranTurismoDataConsole
     {
         public static IWebDriver Driver { get; private set; }
         public static ChromeOptions chromeOptions = new ChromeOptions();
-        static void Main(string[] args)
+        public static HttpClient client = new HttpClient();
+    static void Main(string[] args)
         {
             using (var context = new GTDataDbContext())
             {
@@ -85,8 +80,6 @@ namespace GranTurismoDataConsole
             }
 
             processCarsLinks();
-
-            Driver.Close();
         }
         static void saveCarLink(string carLink)
         {
@@ -99,18 +92,18 @@ namespace GranTurismoDataConsole
         }
 
 
-        static void processCarsLinks()
+        static async void processCarsLinks()
         {
             var result = false;
             using (var context = new GTDataDbContext())
             {
 
-                var links = context.Links.Where(link => link.Created == false).ToList();
+                var links = context.Links.Where(link => link.Created == false && link.Type == DataType.Car).ToList();
                 
                 foreach (var link in links)
                 {
                     
-                    result = processCarLink(link.Href!);
+                    result = await processCarLink(link.Href!);
 
                     if(result)
                     {
@@ -122,7 +115,7 @@ namespace GranTurismoDataConsole
             }
         }
 
-        static bool processCarLink(string carLink)
+        static async Task<bool> processCarLink(string carLink)
         {
             if (string.IsNullOrEmpty(carLink))
             {
@@ -130,12 +123,19 @@ namespace GranTurismoDataConsole
             }
 
             var result = false;
-            Driver.Navigate().GoToUrl(carLink);
 
             try
             {
 
-                var model = Driver.FindElements(By.CssSelector("aside > h2"));
+                Driver.Navigate().GoToUrl(carLink);
+                var banner = Driver.FindElements(By.ClassName("NN0_TB_DIsNmMHgJWgT7U"));
+
+                if (banner.Count == 1)
+                {
+                    banner[0].Click();
+                }
+
+                var model = Driver.FindElements(By.CssSelector("aside > h2"))[0].Text;
                 var brandWithProductionInfo = Driver.FindElements(By.CssSelector("aside > section:nth-child(3) > div > div"));
                 var brandWithoutProductionInfo = new List<IWebElement>();
 
@@ -144,27 +144,39 @@ namespace GranTurismoDataConsole
                     brandWithoutProductionInfo = Driver.FindElements(By.CssSelector("div[data-source='manufacturer'] > div > a")).ToList();
                 }
 
-                var power = Driver.FindElements(By.CssSelector("div[data-source='power'] > div"));
-                var weight = Driver.FindElements(By.CssSelector("div[data-source='weight'] > div"));
+                var power = Driver.FindElements(By.CssSelector("div[data-source='power'] > div"))[0].Text.Split(' ')[0];
+                var weight = Driver.FindElements(By.CssSelector("div[data-source='weight'] > div"))[0].Text.Split(' ')[0];
                 var category = Driver.FindElements(By.CssSelector("div[data-source='class'] > div"));
                 var finalBrand = brandWithProductionInfo.Count() > 0 ? brandWithProductionInfo[0].Text.Split('\r')[0] : brandWithoutProductionInfo[0].Text;
                 var finalCategory = category.Count() > 0 ? category[0].Text : "";
 
-                var car = model[0].Text + ' ' + finalBrand + ' ' + power[0].Text.Split(' ')[0] + ' ' + weight[0].Text.Split(' ')[0] + ' ' + finalCategory;
 
-                // Call API to insert car
-                // Llamar a la API y si devuelve bien, lo marcamos como true
-
-                if (true) // Check que todas las propiedades necesarias se estén mandando rellenadas
+                if (model.Length > 0 && weight.Length > 0 && power.Length > 0) 
                 {
+                    var car = new Car
+                    {
+                        Model = model,
+                        Brand = finalBrand,
+                        Weight = int.Parse(weight.Replace(",","")),
+                        Power = int.Parse(power.Replace(",", "")),
+                        Category = finalCategory
+                    };
+
                     
+                    string url = "https://localhost:7188/Cars";
+                    string payload = JsonSerializer.Serialize(car);
+                    HttpContent content = new StringContent(payload, Encoding.UTF8 ,"application/json");
+                    HttpResponseMessage response = await client.PostAsync(url, content);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        result = true;
+                    }
                 }
-
-                result = true;
             }
-            catch
+            catch (Exception ex) 
             {
-
+                Console.WriteLine("There was a problem trying to create a car.");
             }
 
             return result;
