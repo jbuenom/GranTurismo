@@ -1,4 +1,4 @@
-namespace GranTurismoApi
+namespace GranTurismoDataConsole
 {
     public class Circuit
     {

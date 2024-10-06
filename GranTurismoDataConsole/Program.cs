@@ -4,6 +4,7 @@ using OpenQA.Selenium.Chrome;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace GranTurismoDataConsole
 {
@@ -60,12 +61,16 @@ namespace GranTurismoDataConsole
         static void GetCars()
         {
             Console.WriteLine("Let's update cars list...");
-            chromeOptions.AddArgument("--disable-search-engine-choice-screen");
+            chromeOptions.AddArguments(["--disable-search-engine-choice-screen", "--headless", "--disable-gpu"]);
             Driver = new ChromeDriver(chromeOptions);
             Driver.Manage().Window.Maximize();
             Driver.Navigate().GoToUrl("https://gran-turismo.fandom.com/wiki/Gran_Turismo_7/Car_List");
-            // Accept cookies
-            Driver.FindElement(By.ClassName("NN0_TB_DIsNmMHgJWgT7U")).Click();
+            var cookies = Driver.FindElements(By.ClassName("NN0_TB_DIsNmMHgJWgT7U"));
+
+            if (cookies.Count == 1)
+            {
+                cookies[0].Click();
+            }
             IReadOnlyList<IWebElement> cars = Driver.FindElements(By.CssSelector("td > a[href*='/wiki/']"));
 
             var hrefs = cars
@@ -75,35 +80,35 @@ namespace GranTurismoDataConsole
 
             foreach (var href in hrefs)
             {
-                saveCarLink(href);
+                saveLink(href, DataType.Car);
 
             }
 
-            processCarsLinks();
+            ProcessLinks(DataType.Car);
         }
-        static void saveCarLink(string carLink)
+        static void saveLink(string Link, DataType typeLink)
         {
             using (var context = new GTDataDbContext())
             {
-                var newLink = new Link { Href = carLink, Created = false };
+                var newLink = new Link { Href = Link, Type = typeLink, Created = false };
                 context.Links.Add(newLink);
                 context.SaveChanges();
             }
         }
 
 
-        static async void processCarsLinks()
+        static async void ProcessLinks(DataType typeLink)
         {
             var result = false;
             using (var context = new GTDataDbContext())
             {
 
-                var links = context.Links.Where(link => link.Created == false && link.Type == DataType.Car).ToList();
+                var links = context.Links.Where(link => link.Created == false && link.Type == typeLink).ToList();
                 
                 foreach (var link in links)
                 {
                     
-                    result = await processCarLink(link.Href!);
+                    result = typeLink == DataType.Car ? await GetCarData(link.Href!) : await GetCircuitData(link.Href!);
 
                     if(result)
                     {
@@ -115,7 +120,7 @@ namespace GranTurismoDataConsole
             }
         }
 
-        static async Task<bool> processCarLink(string carLink)
+        static async Task<bool> GetCarData(string carLink)
         {
             if (string.IsNullOrEmpty(carLink))
             {
@@ -128,11 +133,11 @@ namespace GranTurismoDataConsole
             {
 
                 Driver.Navigate().GoToUrl(carLink);
-                var banner = Driver.FindElements(By.ClassName("NN0_TB_DIsNmMHgJWgT7U"));
+                var cookies = Driver.FindElements(By.ClassName("NN0_TB_DIsNmMHgJWgT7U"));
 
-                if (banner.Count == 1)
+                if (cookies.Count == 1)
                 {
-                    banner[0].Click();
+                    cookies[0].Click();
                 }
 
                 var model = Driver.FindElements(By.CssSelector("aside > h2"))[0].Text;
@@ -185,10 +190,105 @@ namespace GranTurismoDataConsole
         static void GetCircuits()
         {
             Console.WriteLine("Let's update circuits list...");
-            // Go to Track list
-            //WebDriverWait wait = new WebDriverWait(driver, TimeSpan.FromSeconds(3));
-            //wait.Until(d => cars[0].Displayed);
-            //driver.FindElement(By.CssSelector("#mw-content-text > div > div > ul > li:nth-child(4) > a")).Click();
+            chromeOptions.AddArguments(["--disable-search-engine-choice-screen", "--headless", "--disable-gpu"]);
+            Driver = new ChromeDriver(chromeOptions);
+            Driver.Manage().Window.Maximize();
+            Driver.Navigate().GoToUrl("https://gran-turismo.fandom.com/wiki/Gran_Turismo_7/Track_List");
+            var cookies = Driver.FindElements(By.ClassName("NN0_TB_DIsNmMHgJWgT7U"));
+
+            if (cookies.Count == 1)
+            {
+                cookies[0].Click();
+            }
+            IReadOnlyList<IWebElement> circuits = Driver.FindElements(By.CssSelector("td > a[href*='/wiki/']"));
+
+            var hrefs = circuits
+              .Select(link => link.GetAttribute("href"))
+              .Where(href => !string.IsNullOrEmpty(href))
+              .Distinct();
+
+            foreach (var href in hrefs)
+            {
+                saveLink(href, DataType.Circuit);
+
+            }
+
+            ProcessLinks(DataType.Circuit);
+        }
+
+        static async Task<bool> GetCircuitData(string circuitLink)
+        {
+            if (string.IsNullOrEmpty(circuitLink))
+            {
+                return false;
+            }
+
+            var result = false;
+
+            try
+            {
+
+                Driver.Navigate().GoToUrl(circuitLink);
+                var cookies = Driver.FindElements(By.ClassName("NN0_TB_DIsNmMHgJWgT7U"));
+
+                if (cookies.Count == 1)
+                {
+                    cookies[0].Click();
+                }
+
+                var name = Driver.FindElements(By.CssSelector("aside > h2"));
+                var location = Driver.FindElements(By.CssSelector("div[data-source='country'] > div > a"));
+                var record = Driver.FindElements(By.CssSelector("div[data-source='fastestlap'] > div"));
+                var distance = Driver.FindElements(By.CssSelector("div[data-source='length'] > div"));
+                var km = "";
+                var recordTime = "";
+
+                if (distance.Count > 0) 
+                {
+                    var distancePattern = @"(\d+(\.\d+)?)\s*(kilometres|km)";
+                    
+                    Match match = Regex.Match(distance[0].Text, distancePattern, RegexOptions.IgnoreCase);
+
+                    if (match.Success) 
+                    {
+                        km = match.Groups[1].Value;
+                    }
+                    
+                }
+
+                if(record.Count > 0)
+                {
+                    recordTime = record[0].Text;
+                }
+
+                if (name.Count > 0 && location.Count > 0 && km.Length > 0)
+                {
+                    var circuit = new Circuit
+                    {
+                        Name = name[0].Text,
+                        Location = location[0].Text,
+                        Distance = float.Parse(km.Replace(".", ",")),
+                        Record = recordTime
+                    };
+
+
+                    string url = "https://localhost:7188/Circuits";
+                    string payload = JsonSerializer.Serialize(circuit);
+                    HttpContent content = new StringContent(payload, Encoding.UTF8, "application/json");
+                    HttpResponseMessage response = await client.PostAsync(url, content);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        result = true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("There was a problem trying to create a circuit.");
+            }
+
+            return result;
         }
     }
 }
